@@ -66,30 +66,17 @@ export default function Page() {
       const file = state.videoFile
       const mimeType = file.type || 'video/mp4'
 
-      // 1. Get a resumable upload session URL from Gemini (via Vercel, tiny request)
-      const urlRes = await fetch(
-        `/api/analyze/upload-url?mimeType=${encodeURIComponent(mimeType)}&fileName=${encodeURIComponent(file.name)}&fileSize=${file.size}`
+      // 1. Upload video via Edge proxy — streams through Vercel to Gemini,
+      //    no body size limit thanks to Edge runtime
+      const uploadRes = await fetch(
+        `/api/analyze/upload?mimeType=${encodeURIComponent(mimeType)}&fileName=${encodeURIComponent(file.name)}&fileSize=${file.size}`,
+        { method: 'POST', body: file }
       )
-      if (!urlRes.ok) {
-        const e = await urlRes.json().catch(() => ({ error: 'Unknown error' }))
-        throw new Error(e.error || 'Failed to get upload URL')
+      if (!uploadRes.ok) {
+        const e = await uploadRes.json().catch(() => ({ error: 'Upload failed' }))
+        throw new Error(e.error || 'Failed to upload video')
       }
-      const { uploadUrl } = await urlRes.json()
-
-      // 2. Upload file directly from browser to Gemini (no Vercel involved)
-      const uploadRes = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'X-Goog-Upload-Command': 'upload, finalize',
-          'X-Goog-Upload-Offset':  '0',
-          'Content-Type':          mimeType,
-        },
-        body: file,
-      })
-      if (!uploadRes.ok) throw new Error('Failed to upload video to Gemini')
-      const uploadData = await uploadRes.json()
-      const fileName = uploadData.file?.name
-      const fileUri  = uploadData.file?.uri
+      const { fileName, fileUri } = await uploadRes.json()
       if (!fileName || !fileUri) throw new Error('Upload response missing file info')
 
       // 3. Analyze — pass only the file reference, no video bytes through Vercel
