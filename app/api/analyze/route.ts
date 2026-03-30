@@ -97,7 +97,7 @@ Return ONLY valid JSON, no markdown fences, no explanation:
   let rawText: string
   try {
     const result = await genAI.models.generateContent({
-      model: 'gemini-1.5-pro',
+      model: 'gemini-2.5-flash',
       contents: [
         {
           role: 'user',
