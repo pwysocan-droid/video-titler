@@ -1,0 +1,97 @@
+.dropZone {
+  border: 2px dashed var(--dim);
+  background: var(--bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  transition: border-color 0.15s, background 0.15s;
+  user-select: none;
+}
+
+.dropZone:hover {
+  border-color: var(--ink);
+  background: #eeece5;
+}
+
+.dragging {
+  border-color: var(--acc);
+  background: #fdf0ee;
+}
+
+.hasFile {
+  border-style: solid;
+  border-color: var(--ink);
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.plusIcon {
+  font-size: 40px;
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--dim);
+  line-height: 1;
+}
+
+.promptText {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  color: var(--ink);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.promptSub {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  color: var(--dim);
+  margin: 0;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.fileInfo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+}
+
+.fileIcon {
+  font-size: 28px;
+  color: var(--acc);
+  flex-shrink: 0;
+}
+
+.fileMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fileName {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.fileSize {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}

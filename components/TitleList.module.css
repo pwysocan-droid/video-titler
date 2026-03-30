@@ -1,0 +1,236 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-right: 2px solid var(--ink);
+  background: var(--bg);
+}
+
+.listHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--dim);
+}
+
+.label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--dim);
+}
+
+.count {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+}
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.empty {
+  padding: 32px 16px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--dim);
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+.row {
+  border-bottom: 1px solid rgba(136, 136, 128, 0.3);
+  padding: 12px 16px;
+  transition: background 0.1s;
+}
+
+.row:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.rowHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.rowIndex {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  color: var(--acc);
+  letter-spacing: 0.1em;
+  min-width: 20px;
+  flex-shrink: 0;
+}
+
+.timeRange {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.timeInput {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--dim);
+  padding: 2px 4px;
+  width: 72px;
+  outline: none;
+}
+
+.timeInput:focus {
+  border-color: var(--ink);
+}
+
+.timeSep {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--dim);
+}
+
+.deleteBtn {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 16px;
+  color: var(--dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.1s;
+  flex-shrink: 0;
+}
+
+.deleteBtn:hover {
+  color: var(--acc);
+}
+
+.rowBody {
+  margin-bottom: 8px;
+}
+
+.textInput {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 18px;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--dim);
+  width: 100%;
+  outline: none;
+  padding: 2px 0;
+  transition: border-color 0.15s;
+}
+
+.textInput:focus {
+  border-bottom-color: var(--ink);
+}
+
+.rowControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.controlGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.controlLabel {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.select {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--dim);
+  padding: 2px 4px;
+  outline: none;
+  cursor: pointer;
+}
+
+.select:focus {
+  border-color: var(--ink);
+}
+
+.colorWrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.colorInput {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--dim);
+  padding: 0;
+  cursor: pointer;
+  background: none;
+}
+
+.colorHex {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+}
+
+.posGroup {
+  display: flex;
+  gap: 4px;
+}
+
+.posInput {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--dim);
+  padding: 2px 4px;
+  width: 52px;
+  outline: none;
+}
+
+.posInput:focus {
+  border-color: var(--ink);
+}
+
+.addBtn {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  background: none;
+  border: none;
+  border-top: 1px solid var(--dim);
+  padding: 14px 16px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.1s, color 0.1s;
+}
+
+.addBtn:hover {
+  background: var(--ink);
+  color: var(--bg);
+}
