@@ -23,6 +23,20 @@
   object-fit: contain;
 }
 
+.videoError {
+  position: absolute;
+  bottom: 40px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--acc);
+  padding: 6px 12px;
+  background: rgba(244, 242, 236, 0.9);
+}
+
 .titleOverlay {
   position: absolute;
   pointer-events: none;

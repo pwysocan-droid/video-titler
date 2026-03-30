@@ -23,6 +23,7 @@ export default function VideoPlayer({ videoUrl, titles, onTimeUpdate }: VideoPla
   const [duration, setDuration] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [videoSize, setVideoSize] = useState({ width: 0, height: 0 })
+  const [videoError, setVideoError] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   function handleTimeUpdate(e: SyntheticEvent<HTMLVideoElement>) {
@@ -32,7 +33,22 @@ export default function VideoPlayer({ videoUrl, titles, onTimeUpdate }: VideoPla
   }
 
   function handleLoadedMetadata(e: SyntheticEvent<HTMLVideoElement>) {
-    setDuration(e.currentTarget.duration)
+    const d = e.currentTarget.duration
+    if (d && isFinite(d)) setDuration(d)
+  }
+
+  function handleLoadedData(e: SyntheticEvent<HTMLVideoElement>) {
+    const d = e.currentTarget.duration
+    if (d && isFinite(d) && duration === 0) setDuration(d)
+  }
+
+  function handleDurationChange(e: SyntheticEvent<HTMLVideoElement>) {
+    const d = e.currentTarget.duration
+    if (d && isFinite(d)) setDuration(d)
+  }
+
+  function handleVideoError() {
+    setVideoError('This video format may not be supported in your browser. Try converting to MP4.')
   }
 
   function handlePlay() { setIsPlaying(true) }
@@ -67,11 +83,18 @@ export default function VideoPlayer({ videoUrl, titles, onTimeUpdate }: VideoPla
           src={videoUrl}
           onTimeUpdate={handleTimeUpdate}
           onLoadedMetadata={handleLoadedMetadata}
+          onLoadedData={handleLoadedData}
+          onDurationChange={handleDurationChange}
           onPlay={handlePlay}
           onPause={handlePause}
           onEnded={handleEnded}
+          onError={handleVideoError}
           controls
+          playsInline
         />
+        {videoError && (
+          <div className={styles.videoError}>{videoError}</div>
+        )}
 
         {/* Overlay titles */}
         {videoSize.width > 0 &&
