@@ -209,6 +209,6 @@ function cleanup(dir: string) {
   }
 }
 
-app.listen(PORT, () => {
-  console.log(`Render service listening on port ${PORT}`)
+app.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`Render service listening on 0.0.0.0:${PORT}`)
 })
