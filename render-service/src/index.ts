@@ -9,6 +9,7 @@ import os from 'os'
 import { v4 as uuidv4 } from 'uuid'
 // @ts-ignore — ffmpeg-static types
 import ffmpegStatic from 'ffmpeg-static'
+import { GoogleGenAI } from '@google/genai'
 import { TitleCard } from './types'
 
 const execFileAsync = promisify(execFile)
@@ -93,6 +94,104 @@ function buildDrawtextFilter(titles: TitleCard[], fontPath: string | null): stri
     })
     .join(',')
 }
+
+// ── Analyze endpoint — no timeout constraints here unlike Vercel ──
+
+const ANALYZE_PROMPT = `Analyze this video and suggest title card text overlays — chapter titles, section markers, mood phrases, or context labels that would enhance the viewing experience typographically.
+
+For each title:
+- text: concise, typographic (1–6 words)
+- startTime / endTime: precise seconds when it should appear/disappear
+- x, y: 0–1 normalized position (keep in safe zone: x 0.05–0.85, y 0.05–0.85)
+- fontSize: 48 | 64 | 80 (choose based on title importance)
+- color: "#FFFFFF" or "#0A0A08" based on what reads best against the background
+- align: "left" | "center" | "right"
+
+Also estimate video duration, resolution (width x height), fps.
+
+Return ONLY valid JSON, no markdown fences, no explanation:
+{"titles":[{"text":"...","startTime":0,"endTime":3,"x":0.08,"y":0.08,"fontSize":64,"color":"#FFFFFF","align":"left"}],"duration":60.0,"width":1920,"height":1080,"fps":24,"styleNotes":"..."}`
+
+app.post('/api/analyze', async (req: Request, res: Response) => {
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' })
+
+  const { fileName, fileUri, mimeType } = req.body
+  if (!fileName || !fileUri) {
+    return res.status(400).json({ error: 'fileName and fileUri are required' })
+  }
+
+  const genAI = new GoogleGenAI({ apiKey })
+
+  // Poll until ACTIVE
+  const maxWaitMs = 180_000
+  const pollMs    = 3_000
+  const start     = Date.now()
+  let   state     = 'PROCESSING'
+
+  while (state !== 'ACTIVE') {
+    if (Date.now() - start > maxWaitMs) {
+      return res.status(504).json({ error: 'Timed out waiting for Gemini to process video' })
+    }
+    if (state === 'FAILED') {
+      return res.status(500).json({ error: 'Gemini video processing failed' })
+    }
+    await new Promise((r) => setTimeout(r, pollMs))
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const file = await genAI.files.get({ name: fileName }) as any
+      state = file.state ?? 'PROCESSING'
+    } catch (err) {
+      console.error('Poll error:', err)
+      return res.status(500).json({ error: 'Failed to poll Gemini file state' })
+    }
+  }
+
+  let rawText: string
+  try {
+    const result = await genAI.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [{
+        role: 'user',
+        parts: [
+          { fileData: { mimeType: mimeType || 'video/mp4', fileUri } },
+          { text: ANALYZE_PROMPT },
+        ],
+      }],
+    })
+    rawText = result.text ?? ''
+  } catch (err) {
+    console.error('generateContent failed:', err)
+    return res.status(500).json({ error: 'Gemini analysis failed' })
+  }
+
+  let jsonText = rawText.trim()
+  if (jsonText.startsWith('```')) {
+    jsonText = jsonText.replace(/^```[a-z]*\n?/, '').replace(/\n?```$/, '').trim()
+  }
+
+  let parsed: any
+  try {
+    parsed = JSON.parse(jsonText)
+  } catch {
+    console.error('Failed to parse Gemini JSON:', jsonText)
+    return res.status(500).json({ error: 'Failed to parse Gemini response' })
+  }
+
+  const titles = (parsed.titles || []).map((t: any) => ({
+    ...t,
+    id: uuidv4(),
+  }))
+
+  res.json({
+    titles,
+    duration:   parsed.duration   ?? 0,
+    width:      parsed.width      ?? 1920,
+    height:     parsed.height     ?? 1080,
+    fps:        parsed.fps        ?? 24,
+    styleNotes: parsed.styleNotes ?? '',
+  })
+})
 
 // ── Render endpoint ──
 

@@ -79,8 +79,8 @@ export default function Page() {
       const { fileName, fileUri } = await uploadRes.json()
       if (!fileName || !fileUri) throw new Error('Upload response missing file info')
 
-      // 3. Analyze — pass only the file reference, no video bytes through Vercel
-      const analyzeRes = await fetch('/api/analyze', {
+      // 3. Analyze on Fly.io — no timeout constraints
+      const analyzeRes = await fetch(`${renderUrl.replace(/\/$/, '')}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileName, fileUri, mimeType }),
