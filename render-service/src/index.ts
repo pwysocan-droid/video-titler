@@ -49,6 +49,69 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ ok: true })
 })
 
+// ── Upload proxy — streams video to Gemini resumable upload, no size limit ──
+
+app.post(
+  '/api/upload',
+  upload.single('video'),
+  async (req: Request, res: Response) => {
+    const apiKey = process.env.GEMINI_API_KEY
+    if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' })
+
+    const videoFile = req.file
+    if (!videoFile) return res.status(400).json({ error: 'No video file provided' })
+
+    const mimeType = videoFile.mimetype || 'video/mp4'
+    const fileName = videoFile.originalname || 'video'
+
+    // 1. Init resumable upload session with Gemini
+    const initRes = await fetch(
+      `https://generativelanguage.googleapis.com/upload/v1beta/files?uploadType=resumable&key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'X-Goog-Upload-Protocol':              'resumable',
+          'X-Goog-Upload-Command':               'start',
+          'X-Goog-Upload-Header-Content-Length': String(videoFile.size),
+          'X-Goog-Upload-Header-Content-Type':   mimeType,
+          'Content-Type':                        'application/json',
+        },
+        body: JSON.stringify({ file: { display_name: fileName } }),
+      }
+    )
+
+    if (!initRes.ok) {
+      const err = await initRes.text()
+      return res.status(500).json({ error: `Upload init failed: ${err}` })
+    }
+
+    const uploadUrl = initRes.headers.get('X-Goog-Upload-URL')
+    if (!uploadUrl) return res.status(500).json({ error: 'No upload URL from Gemini' })
+
+    // 2. Upload the buffered video to Gemini
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'X-Goog-Upload-Command': 'upload, finalize',
+        'X-Goog-Upload-Offset':  '0',
+        'Content-Type':          mimeType,
+      },
+      body: videoFile.buffer,
+    })
+
+    if (!uploadRes.ok) {
+      const err = await uploadRes.text()
+      return res.status(500).json({ error: `Upload to Gemini failed: ${err}` })
+    }
+
+    const data = await uploadRes.json() as { file?: { name?: string; uri?: string } }
+    res.json({
+      fileName: data.file?.name,
+      fileUri:  data.file?.uri,
+    })
+  }
+)
+
 // ── Escape helpers for FFmpeg drawtext ──
 
 function escapeText(text: string): string {

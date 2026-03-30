@@ -66,11 +66,12 @@ export default function Page() {
       const file = state.videoFile
       const mimeType = file.type || 'video/mp4'
 
-      // 1. Upload video via Edge proxy — streams through Vercel to Gemini,
-      //    no body size limit thanks to Edge runtime
+      // 1. Upload video via Fly.io proxy — no body size limit
+      const uploadForm = new FormData()
+      uploadForm.append('video', file)
       const uploadRes = await fetch(
-        `/api/analyze/upload?mimeType=${encodeURIComponent(mimeType)}&fileName=${encodeURIComponent(file.name)}&fileSize=${file.size}`,
-        { method: 'POST', body: file }
+        `${renderUrl.replace(/\/$/, '')}/api/upload`,
+        { method: 'POST', body: uploadForm }
       )
       if (!uploadRes.ok) {
         const e = await uploadRes.json().catch(() => ({ error: 'Upload failed' }))
