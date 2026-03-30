@@ -56,28 +56,61 @@ export default function Page() {
   }
 
   // Step 02: Analyze video with Gemini
+  // Three-step flow: get upload URL → browser uploads direct to Gemini → analyze
+  // This bypasses Vercel's 4.5MB body limit entirely.
   async function handleAnalyze() {
     if (!state.videoFile) return
     patch({ isProcessing: true, error: null })
 
     try {
-      const formData = new FormData()
-      formData.append('video', state.videoFile)
+      const file = state.videoFile
+      const mimeType = file.type || 'video/mp4'
 
-      const res = await fetch('/api/analyze', { method: 'POST', body: formData })
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: 'Unknown error' }))
-        throw new Error(errData.error || `HTTP ${res.status}`)
+      // 1. Get a resumable upload session URL from Gemini (via Vercel, tiny request)
+      const urlRes = await fetch(
+        `/api/analyze/upload-url?mimeType=${encodeURIComponent(mimeType)}&fileName=${encodeURIComponent(file.name)}&fileSize=${file.size}`
+      )
+      if (!urlRes.ok) {
+        const e = await urlRes.json().catch(() => ({ error: 'Unknown error' }))
+        throw new Error(e.error || 'Failed to get upload URL')
+      }
+      const { uploadUrl } = await urlRes.json()
+
+      // 2. Upload file directly from browser to Gemini (no Vercel involved)
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'X-Goog-Upload-Command': 'upload, finalize',
+          'X-Goog-Upload-Offset':  '0',
+          'Content-Type':          mimeType,
+        },
+        body: file,
+      })
+      if (!uploadRes.ok) throw new Error('Failed to upload video to Gemini')
+      const uploadData = await uploadRes.json()
+      const fileName = uploadData.file?.name
+      const fileUri  = uploadData.file?.uri
+      if (!fileName || !fileUri) throw new Error('Upload response missing file info')
+
+      // 3. Analyze — pass only the file reference, no video bytes through Vercel
+      const analyzeRes = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName, fileUri, mimeType }),
+      })
+      if (!analyzeRes.ok) {
+        const e = await analyzeRes.json().catch(() => ({ error: 'Unknown error' }))
+        throw new Error(e.error || `HTTP ${analyzeRes.status}`)
       }
 
-      const data: AnalyzeResponse = await res.json()
+      const data: AnalyzeResponse = await analyzeRes.json()
       setStyleNotes(data.styleNotes || '')
       patch({
-        titles: data.titles,
-        duration: data.duration,
-        videoWidth: data.width,
+        titles:      data.titles,
+        duration:    data.duration,
+        videoWidth:  data.width,
         videoHeight: data.height,
-        step: 'edit',
+        step:        'edit',
         isProcessing: false,
       })
     } catch (err) {
