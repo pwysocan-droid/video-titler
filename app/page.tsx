@@ -32,7 +32,7 @@ const initialState: AppState = {
 export default function Page() {
   const [state, setState] = useState<AppState>(initialState)
   const [renderUrl, setRenderUrl] = useState(
-    process.env.NEXT_PUBLIC_RENDER_URL || 'http://localhost:3001'
+    process.env.NEXT_PUBLIC_RENDER_URL || 'https://video-titler-render.fly.dev'
   )
   const [exportProgress, setExportProgress] = useState<string | null>(null)
   const [styleNotes, setStyleNotes] = useState<string>('')
