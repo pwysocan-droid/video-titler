@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { AppState, TitleCard, DEFAULT_TITLE, AnalyzeResponse } from '@/types'
+import { useState, useRef } from 'react'
+import { AppState, TitleCard, AnalyzeResponse } from '@/types'
 import Upload from '@/components/Upload'
 import TitleList from '@/components/TitleList'
 import VideoPlayer from '@/components/VideoPlayer'
@@ -36,6 +36,9 @@ export default function Page() {
   )
   const [exportProgress, setExportProgress] = useState<string | null>(null)
   const [styleNotes, setStyleNotes] = useState<string>('')
+  const [fontError, setFontError] = useState<string | null>(null)
+  const [isValidatingFont, setIsValidatingFont] = useState(false)
+  const fontInputRef = useRef<HTMLInputElement>(null)
 
   function patch(updates: Partial<AppState>) {
     setState((prev) => ({ ...prev, ...updates }))
@@ -88,6 +91,31 @@ export default function Page() {
   // Step 03: Edit titles
   function handleTitlesChange(titles: TitleCard[]) {
     patch({ titles })
+  }
+
+  async function handleFontUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setFontError(null)
+    setIsValidatingFont(true)
+    try {
+      const formData = new FormData()
+      formData.append('font', file)
+      const res = await fetch('/api/fonts', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (data.valid) {
+        const name = data.subfamilyName && data.subfamilyName !== 'Regular'
+          ? `${data.familyName} ${data.subfamilyName}`
+          : data.familyName
+        patch({ fontFile: file, fontName: name })
+      } else {
+        setFontError(data.error || 'Invalid font file')
+      }
+    } catch {
+      setFontError('Failed to validate font')
+    } finally {
+      setIsValidatingFont(false)
+    }
   }
 
   function handleFontSelect(file: File, name: string) {
@@ -259,6 +287,24 @@ export default function Page() {
         {state.step === 'edit' && (
           <div className={styles.editStep}>
             <div className={styles.editSidebar}>
+              <div className={styles.fontRow}>
+                <span className={styles.sidebarLabel}>Font</span>
+                <button
+                  className={styles.fontBtn}
+                  onClick={() => fontInputRef.current?.click()}
+                  disabled={isValidatingFont}
+                >
+                  {isValidatingFont ? 'Checking...' : state.fontName ? state.fontName : 'Upload .TTF'}
+                </button>
+                <input
+                  ref={fontInputRef}
+                  type="file"
+                  accept=".ttf,.otf"
+                  onChange={handleFontUpload}
+                  style={{ display: 'none' }}
+                />
+                {fontError && <span className={styles.fontError}>{fontError}</span>}
+              </div>
               <TitleList titles={state.titles} onChange={handleTitlesChange} />
             </div>
             <div className={styles.editContent}>

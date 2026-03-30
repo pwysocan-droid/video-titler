@@ -276,6 +276,45 @@
   overflow: hidden;
 }
 
+.fontRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(10,10,8,0.12);
+  flex-shrink: 0;
+}
+
+.sidebarLabel {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.fontBtn {
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 5px 10px;
+  border: 1px solid var(--ink);
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.fontBtn:hover { background: var(--ink); color: var(--bg); }
+.fontBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.fontError {
+  font-size: 9px;
+  color: var(--acc);
+}
+
 /* ── Export Step ── */
 .exportStep {
   flex: 1;

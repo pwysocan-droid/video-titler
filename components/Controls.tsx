@@ -1,6 +1,5 @@
 'use client'
 
-import { useRef, useState, ChangeEvent } from 'react'
 import styles from './Controls.module.css'
 
 interface ControlsProps {
@@ -17,44 +16,10 @@ export default function Controls({
   renderUrl,
   onRenderUrlChange,
   fontName,
-  onFontSelect,
   onExport,
   isProcessing,
   exportProgress,
 }: ControlsProps) {
-  const fontInputRef = useRef<HTMLInputElement>(null)
-  const [fontError, setFontError] = useState<string | null>(null)
-  const [isValidatingFont, setIsValidatingFont] = useState(false)
-
-  async function handleFontChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    setFontError(null)
-    setIsValidatingFont(true)
-
-    const formData = new FormData()
-    formData.append('font', file)
-
-    try {
-      const res = await fetch('/api/fonts', { method: 'POST', body: formData })
-      const data = await res.json()
-
-      if (data.valid) {
-        const displayName = data.subfamilyName && data.subfamilyName !== 'Regular'
-          ? `${data.familyName} ${data.subfamilyName}`
-          : data.familyName
-        onFontSelect(file, displayName)
-      } else {
-        setFontError(data.error || 'Invalid font file')
-      }
-    } catch {
-      setFontError('Failed to validate font')
-    } finally {
-      setIsValidatingFont(false)
-    }
-  }
-
   return (
     <div className={styles.container}>
       <div className={styles.section}>
@@ -64,37 +29,17 @@ export default function Controls({
           type="url"
           value={renderUrl}
           onChange={(e) => onRenderUrlChange(e.target.value)}
-          placeholder="https://your-service.railway.app"
+          placeholder="https://your-service.fly.dev"
         />
-        <p className={styles.hint}>Deploy render-service to Railway and paste the URL here</p>
+        <p className={styles.hint}>Render service URL (Fly.io / Railway)</p>
       </div>
 
-      <div className={styles.section}>
-        <label className={styles.sectionLabel}>Custom Font</label>
-        <div className={styles.fontRow}>
-          <button
-            className={styles.fontBtn}
-            onClick={() => fontInputRef.current?.click()}
-            disabled={isValidatingFont}
-          >
-            {isValidatingFont ? 'Validating...' : 'Upload .TTF'}
-          </button>
-          {fontName && (
-            <span className={styles.fontName}>{fontName}</span>
-          )}
+      {fontName && (
+        <div className={styles.section}>
+          <label className={styles.sectionLabel}>Font</label>
+          <span className={styles.fontName}>{fontName}</span>
         </div>
-        <input
-          ref={fontInputRef}
-          type="file"
-          accept=".ttf,.otf"
-          onChange={handleFontChange}
-          style={{ display: 'none' }}
-        />
-        {fontError && <p className={styles.error}>{fontError}</p>}
-        {!fontName && !fontError && (
-          <p className={styles.hint}>Optional — use a custom .ttf for title cards</p>
-        )}
-      </div>
+      )}
 
       <div className={styles.exportSection}>
         <button
