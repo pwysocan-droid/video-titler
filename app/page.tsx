@@ -324,6 +324,13 @@ export default function Page() {
                 {fontError && <span className={styles.fontError}>{fontError}</span>}
               </div>
               <TitleList titles={state.titles} onChange={handleTitlesChange} />
+              <button
+                className={styles.exportBtn}
+                onClick={handleExport}
+                disabled={state.isProcessing}
+              >
+                {state.isProcessing ? exportProgress || 'Exporting...' : 'Export'}
+              </button>
             </div>
             <div className={styles.editContent}>
               {state.videoUrl && (

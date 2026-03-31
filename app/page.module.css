@@ -310,6 +310,23 @@
 .fontBtn:hover { background: var(--ink); color: var(--bg); }
 .fontBtn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+.exportBtn {
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 8px 14px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--bg);
+  cursor: pointer;
+  transition: all 0.12s;
+  margin-top: 16px;
+  width: 100%;
+}
+.exportBtn:hover:not(:disabled) { background: none; color: var(--ink); }
+.exportBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
 .fontError {
   font-size: 9px;
   color: var(--acc);
