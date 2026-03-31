@@ -40,7 +40,10 @@ app.use(
 app.use(express.json())
 
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: os.tmpdir(),
+    filename: (_req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`),
+  }),
   limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB
 })
 
@@ -88,7 +91,7 @@ app.post(
     const uploadUrl = initRes.headers.get('X-Goog-Upload-URL')
     if (!uploadUrl) return res.status(500).json({ error: 'No upload URL from Gemini' })
 
-    // 2. Upload the buffered video to Gemini
+    // 2. Stream the file from disk to Gemini
     const uploadRes = await fetch(uploadUrl, {
       method: 'POST',
       headers: {
@@ -96,8 +99,10 @@ app.post(
         'X-Goog-Upload-Offset':  '0',
         'Content-Type':          mimeType,
       },
-      body: videoFile.buffer,
+      body: fs.readFileSync(videoFile.path),
     })
+
+    cleanupFile(videoFile.path)
 
     if (!uploadRes.ok) {
       const err = await uploadRes.text()
@@ -288,18 +293,15 @@ app.post(
     const tmpDir = path.join(os.tmpdir(), `render-${jobId}`)
     fs.mkdirSync(tmpDir, { recursive: true })
 
-    const inputPath = path.join(tmpDir, `input${path.extname(videoFile.originalname) || '.mp4'}`)
+    const inputPath = videoFile.path  // already on disk via diskStorage
     const outputPath = path.join(tmpDir, 'output.mp4')
     let fontPath: string | null = null
 
     try {
-      // Write input video
-      fs.writeFileSync(inputPath, videoFile.buffer)
-
-      // Write font if provided
+      // Write font if provided (font is small, buffer is fine)
       if (fontFile) {
         fontPath = path.join(tmpDir, `font${path.extname(fontFile.originalname) || '.ttf'}`)
-        fs.writeFileSync(fontPath, fontFile.buffer)
+        fs.renameSync(fontFile.path, fontPath)
       }
 
       const ffmpegBin = ffmpegStatic
@@ -345,14 +347,17 @@ app.post(
       readStream.pipe(res)
       readStream.on('end', () => {
         cleanup(tmpDir)
+        cleanupFile(inputPath)
       })
       readStream.on('error', (err) => {
         console.error('Stream error:', err)
         cleanup(tmpDir)
+        cleanupFile(inputPath)
       })
     } catch (err) {
       console.error('Render error:', err)
       cleanup(tmpDir)
+      cleanupFile(inputPath)
       if (!res.headersSent) {
         return res.status(500).json({ error: 'FFmpeg render failed', details: String(err) })
       }
@@ -373,11 +378,10 @@ app.post(
     const tmpDir = path.join(os.tmpdir(), `transcode-${jobId}`)
     fs.mkdirSync(tmpDir, { recursive: true })
 
-    const inputPath = path.join(tmpDir, `input${path.extname(videoFile.originalname) || '.mov'}`)
+    const inputPath = videoFile.path  // already on disk via diskStorage
     const outputPath = path.join(tmpDir, 'output.mp4')
 
     try {
-      fs.writeFileSync(inputPath, videoFile.buffer)
 
       const ffmpegBin = ffmpegStatic
 
@@ -403,11 +407,12 @@ app.post(
 
       const readStream = fs.createReadStream(outputPath)
       readStream.pipe(res)
-      readStream.on('end', () => cleanup(tmpDir))
-      readStream.on('error', () => cleanup(tmpDir))
+      readStream.on('end', () => { cleanup(tmpDir); cleanupFile(inputPath) })
+      readStream.on('error', () => { cleanup(tmpDir); cleanupFile(inputPath) })
     } catch (err) {
       console.error('Transcode error:', err)
       cleanup(tmpDir)
+      cleanupFile(inputPath)
       if (!res.headersSent) {
         return res.status(500).json({ error: 'Transcode failed', details: String(err) })
       }
@@ -420,6 +425,14 @@ function cleanup(dir: string) {
     fs.rmSync(dir, { recursive: true, force: true })
   } catch (e) {
     console.error('Cleanup error:', e)
+  }
+}
+
+function cleanupFile(filePath: string) {
+  try {
+    fs.rmSync(filePath, { force: true })
+  } catch (e) {
+    console.error('Cleanup file error:', e)
   }
 }
 
