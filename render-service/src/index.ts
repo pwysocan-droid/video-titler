@@ -7,8 +7,8 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import { v4 as uuidv4 } from 'uuid'
-// @ts-ignore — ffmpeg-static types
-import ffmpegStatic from 'ffmpeg-static'
+// Use system ffmpeg installed via apt in Docker
+const ffmpegStatic = 'ffmpeg'
 import { GoogleGenAI } from '@google/genai'
 import { TitleCard } from './types'
 
@@ -302,10 +302,7 @@ app.post(
         fs.writeFileSync(fontPath, fontFile.buffer)
       }
 
-      const ffmpegBin = (ffmpegStatic as unknown as string)
-      if (!ffmpegBin) {
-        return res.status(500).json({ error: 'ffmpeg-static binary not found' })
-      }
+      const ffmpegBin = ffmpegStatic
 
       let ffmpegArgs: string[]
 
@@ -382,8 +379,7 @@ app.post(
     try {
       fs.writeFileSync(inputPath, videoFile.buffer)
 
-      const ffmpegBin = (ffmpegStatic as unknown as string)
-      if (!ffmpegBin) return res.status(500).json({ error: 'ffmpeg-static binary not found' })
+      const ffmpegBin = ffmpegStatic
 
       await execFileAsync(ffmpegBin, [
         '-i', inputPath,
