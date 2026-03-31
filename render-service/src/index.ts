@@ -318,10 +318,10 @@ app.post(
         const filterStr = buildDrawtextFilter(titles, fontPath)
         ffmpegArgs = [
           '-i', inputPath,
-          '-vf', filterStr,
+          '-vf', `${filterStr},format=yuv420p`,
           '-c:v', 'libx264',
-          '-preset', 'fast',
-          '-crf', '22',
+          '-preset', 'ultrafast',
+          '-crf', '23',
           '-c:a', 'copy',
           '-y',
           outputPath,
