@@ -420,6 +420,324 @@ app.post(
   }
 )
 
+// ── Analyze Reel endpoint ──
+
+const REEL_PROMPT = (targetDuration: number, aspectRatio: string, clipCount: number) => `
+You are editing a highlight reel. You have ${clipCount} video clip(s). Select the most compelling, visually interesting moments that together form a cohesive ${targetDuration}-second highlight reel at ${aspectRatio} aspect ratio.
+
+For each selected segment return:
+- clipIndex: 0-based index of the source clip
+- startTime / endTime: precise seconds within that clip
+- title: a short 1–5 word title card overlay (or null if no title fits)
+- focusX / focusY: 0–1 normalized center of the main subject (for smart crop when aspect ratio differs from source)
+
+Rules:
+- Total duration of all segments must be close to ${targetDuration} seconds
+- Pick moments with clear action, expression, or visual interest — avoid boring transitions
+- Order segments for good narrative flow
+- Each segment should be at least 2 seconds, at most 20 seconds
+
+Return ONLY valid JSON, no markdown fences:
+{
+  "segments": [
+    {
+      "clipIndex": 0,
+      "startTime": 5.2,
+      "endTime": 11.0,
+      "focusX": 0.5,
+      "focusY": 0.4,
+      "title": {
+        "text": "Opening Shot",
+        "x": 0.08,
+        "y": 0.08,
+        "fontSize": 64,
+        "color": "#FFFFFF",
+        "align": "left"
+      }
+    }
+  ]
+}`
+
+app.post('/api/analyze-reel', async (req: Request, res: Response) => {
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' })
+
+  const { clips, targetDuration, aspectRatio } = req.body as {
+    clips: { fileName: string; fileUri: string; mimeType: string; clipName: string }[]
+    targetDuration: number
+    aspectRatio: string
+  }
+
+  if (!clips?.length) return res.status(400).json({ error: 'clips are required' })
+
+  const genAI = new GoogleGenAI({ apiKey })
+
+  // Poll all clips in parallel until ACTIVE
+  const maxWaitMs = 180_000
+  const pollMs = 3_000
+
+  await Promise.all(clips.map(async (clip) => {
+    const start = Date.now()
+    let state = 'PROCESSING'
+    while (state !== 'ACTIVE') {
+      if (Date.now() - start > maxWaitMs) throw new Error(`Timed out waiting for ${clip.clipName}`)
+      if (state === 'FAILED') throw new Error(`Gemini failed processing ${clip.clipName}`)
+      await new Promise(r => setTimeout(r, pollMs))
+      const file = await genAI.files.get({ name: clip.fileName }) as any
+      state = file.state ?? 'PROCESSING'
+    }
+  }))
+
+  // Build multi-clip prompt content
+  const parts: any[] = [
+    ...clips.map(clip => ({ fileData: { mimeType: clip.mimeType, fileUri: clip.fileUri } })),
+    { text: REEL_PROMPT(targetDuration, aspectRatio, clips.length) },
+  ]
+
+  let rawText: string
+  try {
+    const result = await genAI.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [{ role: 'user', parts }],
+    })
+    rawText = result.text ?? ''
+  } catch (err) {
+    console.error('generateContent failed:', err)
+    return res.status(500).json({ error: 'Gemini analysis failed' })
+  }
+
+  let jsonText = rawText.trim()
+  if (jsonText.startsWith('```')) {
+    jsonText = jsonText.replace(/^```[a-z]*\n?/, '').replace(/\n?```$/, '').trim()
+  }
+
+  let parsed: any
+  try {
+    parsed = JSON.parse(jsonText)
+  } catch {
+    console.error('Failed to parse Gemini JSON:', jsonText)
+    return res.status(500).json({ error: 'Failed to parse Gemini response' })
+  }
+
+  const segments = (parsed.segments || []).map((s: any) => ({
+    ...s,
+    id: uuidv4(),
+    clipName: clips[s.clipIndex]?.clipName ?? `clip_${s.clipIndex}`,
+    title: s.title ? { ...s.title, id: uuidv4(), startTime: s.startTime, endTime: s.endTime } : null,
+  }))
+
+  res.json({ segments })
+})
+
+// ── Render Reel endpoint ──
+
+// Compute FFmpeg crop filter to reframe source to target aspect ratio using focusX/Y
+function buildCropFilter(
+  srcW: number, srcH: number,
+  targetRatio: number,
+  focusX: number, focusY: number
+): string {
+  const srcRatio = srcW / srcH
+  let cropW: number, cropH: number
+  if (srcRatio > targetRatio) {
+    // Source is wider — crop width
+    cropH = srcH
+    cropW = Math.round(srcH * targetRatio)
+  } else {
+    // Source is taller — crop height
+    cropW = srcW
+    cropH = Math.round(srcW / targetRatio)
+  }
+  // Center crop on focus point, clamped to valid range
+  const focusPxX = Math.round(focusX * srcW)
+  const focusPxY = Math.round(focusY * srcH)
+  const x = Math.max(0, Math.min(srcW - cropW, focusPxX - cropW / 2))
+  const y = Math.max(0, Math.min(srcH - cropH, focusPxY - cropH / 2))
+  return `crop=${cropW}:${cropH}:${Math.round(x)}:${Math.round(y)}`
+}
+
+function ratioToNumber(ratio: string): number {
+  const [w, h] = ratio.split(':').map(Number)
+  return w / h
+}
+
+function ratioToResolution(ratio: string): { w: number; h: number } {
+  const map: Record<string, { w: number; h: number }> = {
+    '16:9': { w: 1920, h: 1080 },
+    '9:16': { w: 1080, h: 1920 },
+    '1:1':  { w: 1080, h: 1080 },
+    '4:3':  { w: 1440, h: 1080 },
+  }
+  return map[ratio] ?? { w: 1920, h: 1080 }
+}
+
+app.post(
+  '/api/render-reel',
+  upload.any(),
+  async (req: Request, res: Response) => {
+    const files = (req.files as Express.Multer.File[]) ?? []
+    const videoFiles = files
+      .filter(f => f.fieldname.startsWith('video_'))
+      .sort((a, b) => {
+        const ai = parseInt(a.fieldname.replace('video_', ''))
+        const bi = parseInt(b.fieldname.replace('video_', ''))
+        return ai - bi
+      })
+    const fontFile = files.find(f => f.fieldname === 'font')
+
+    if (videoFiles.length === 0) return res.status(400).json({ error: 'No video files provided' })
+
+    let segments: any[], settings: { targetDuration: number; aspectRatio: string }
+    try {
+      segments = JSON.parse(req.body.segments)
+      settings = JSON.parse(req.body.settings)
+    } catch {
+      return res.status(400).json({ error: 'Invalid segments or settings JSON' })
+    }
+
+    const jobId = uuidv4()
+    const tmpDir = path.join(os.tmpdir(), `reel-${jobId}`)
+    fs.mkdirSync(tmpDir, { recursive: true })
+
+    let fontPath: string | null = null
+    if (fontFile) {
+      fontPath = path.join(tmpDir, `font${path.extname(fontFile.originalname) || '.ttf'}`)
+      fs.renameSync(fontFile.path, fontPath)
+    }
+
+    const targetRatio = ratioToNumber(settings.aspectRatio)
+    const targetRes = ratioToResolution(settings.aspectRatio)
+
+    try {
+      // Probe each source video for dimensions
+      const probeDimensions = async (filePath: string): Promise<{ w: number; h: number }> => {
+        try {
+          const { stdout } = await execFileAsync('ffprobe', [
+            '-v', 'quiet', '-print_format', 'json', '-show_streams', filePath
+          ])
+          const info = JSON.parse(stdout)
+          const vs = info.streams?.find((s: any) => s.codec_type === 'video')
+          return { w: vs?.width ?? 1920, h: vs?.height ?? 1080 }
+        } catch {
+          return { w: 1920, h: 1080 }
+        }
+      }
+
+      // Build one trimmed+scaled segment file per segment
+      const segmentFiles: string[] = []
+
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i]
+        const srcFile = videoFiles[seg.clipIndex]
+        if (!srcFile) continue
+
+        const srcPath = srcFile.path
+        const { w: srcW, h: srcH } = await probeDimensions(srcPath)
+        const srcRatio = srcW / srcH
+        const needsCrop = Math.abs(srcRatio - targetRatio) > 0.01
+
+        const segOut = path.join(tmpDir, `seg_${i}.mp4`)
+        segmentFiles.push(segOut)
+
+        // Build video filter chain
+        const filters: string[] = []
+        if (needsCrop) {
+          filters.push(buildCropFilter(srcW, srcH, targetRatio, seg.focusX ?? 0.5, seg.focusY ?? 0.4))
+        }
+        filters.push(`scale=${targetRes.w}:${targetRes.h}`)
+        filters.push('format=yuv420p')
+
+        // Add title drawtext if present
+        if (seg.title?.text) {
+          const t = seg.title
+          const xExpr = t.align === 'center'
+            ? `W*${t.x.toFixed(4)}-text_w/2`
+            : t.align === 'right'
+            ? `W*${t.x.toFixed(4)}-text_w`
+            : `W*${t.x.toFixed(4)}`
+          const yExpr = `H*${t.y.toFixed(4)}`
+          const escapedText = t.text
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "'\\''")
+            .replace(/:/g, '\\:')
+            .replace(/\[/g, '\\[')
+            .replace(/\]/g, '\\]')
+          const color = t.color.replace('#', '')
+          const fontPart = fontPath ? `fontfile='${fontPath}':` : ''
+          // Title shows for full segment duration (time resets to 0 per segment)
+          const dur = seg.endTime - seg.startTime
+          filters.push(
+            `drawtext=${fontPart}text='${escapedText}':x=${xExpr}:y=${yExpr}:` +
+            `fontsize=${t.fontSize}:fontcolor=${color}:enable='between(t,0,${dur})'`
+          )
+        }
+
+        await execFileAsync(ffmpegStatic, [
+          '-ss', String(seg.startTime),
+          '-to', String(seg.endTime),
+          '-i', srcPath,
+          '-vf', filters.join(','),
+          '-c:v', 'libx264',
+          '-preset', 'ultrafast',
+          '-crf', '23',
+          '-c:a', 'aac',
+          '-ar', '48000',
+          '-y',
+          segOut,
+        ], { maxBuffer: 1024 * 1024 * 50 })
+      }
+
+      if (segmentFiles.length === 0) {
+        return res.status(400).json({ error: 'No valid segments to render' })
+      }
+
+      // Concat all segments
+      const outputPath = path.join(tmpDir, 'output.mp4')
+      if (segmentFiles.length === 1) {
+        fs.renameSync(segmentFiles[0], outputPath)
+      } else {
+        const concatList = path.join(tmpDir, 'concat.txt')
+        fs.writeFileSync(concatList, segmentFiles.map(f => `file '${f}'`).join('\n'))
+        await execFileAsync(ffmpegStatic, [
+          '-f', 'concat',
+          '-safe', '0',
+          '-i', concatList,
+          '-c', 'copy',
+          '-y',
+          outputPath,
+        ], { maxBuffer: 1024 * 1024 * 10 })
+      }
+
+      if (!fs.existsSync(outputPath)) {
+        return res.status(500).json({ error: 'FFmpeg produced no output' })
+      }
+
+      const stat = fs.statSync(outputPath)
+      res.setHeader('Content-Type', 'video/mp4')
+      res.setHeader('Content-Length', stat.size)
+      res.setHeader('Content-Disposition', 'attachment; filename="highlight-reel.mp4"')
+
+      const readStream = fs.createReadStream(outputPath)
+      readStream.pipe(res)
+      readStream.on('end', () => {
+        cleanup(tmpDir)
+        videoFiles.forEach(f => cleanupFile(f.path))
+      })
+      readStream.on('error', () => {
+        cleanup(tmpDir)
+        videoFiles.forEach(f => cleanupFile(f.path))
+      })
+    } catch (err) {
+      console.error('Reel render error:', err)
+      cleanup(tmpDir)
+      videoFiles.forEach(f => cleanupFile(f.path))
+      if (!res.headersSent) {
+        return res.status(500).json({ error: 'Reel render failed', details: String(err) })
+      }
+    }
+  }
+)
+
 function cleanup(dir: string) {
   try {
     fs.rmSync(dir, { recursive: true, force: true })

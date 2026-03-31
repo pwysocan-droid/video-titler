@@ -33,6 +33,44 @@ export interface AppState {
   error: string | null
 }
 
+// ── Highlight Reel types ──
+
+export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:3'
+
+export interface ReelSegment {
+  id: string
+  clipIndex: number       // which uploaded video
+  clipName: string
+  startTime: number       // seconds within source clip
+  endTime: number         // seconds within source clip
+  title: TitleCard | null
+  focusX: number          // 0–1, center of interest (for smart crop)
+  focusY: number          // 0–1
+}
+
+export interface ReelSettings {
+  targetDuration: number  // seconds
+  aspectRatio: AspectRatio
+}
+
+export interface ReelAnalyzeResponse {
+  segments: ReelSegment[]
+  styleNotes: string
+}
+
+export interface ReelAppState {
+  step: 'upload' | 'settings' | 'analyze' | 'edit' | 'export'
+  videoFiles: File[]
+  videoUrls: string[]
+  fontFile: File | null
+  fontName: string | null
+  segments: ReelSegment[]
+  settings: ReelSettings
+  isProcessing: boolean
+  analyzeProgress: string | null
+  error: string | null
+}
+
 export const DEFAULT_TITLE: Omit<TitleCard, 'id'> = {
   text: 'Title',
   startTime: 0,
