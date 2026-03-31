@@ -44,37 +44,12 @@ export default function Page() {
     setState((prev) => ({ ...prev, ...updates }))
   }
 
-  // Step 01: File selected → transcode MOV→MP4 if needed, then advance to analyze
-  async function handleFileSelect(file: File) {
-    const needsTranscode =
-      file.type === 'video/quicktime' ||
-      file.name.toLowerCase().endsWith('.mov')
-
-    if (!needsTranscode) {
-      const url = URL.createObjectURL(file)
-      patch({ videoFile: file, videoUrl: url, step: 'analyze', error: null })
-      return
-    }
-
-    patch({ isProcessing: true, error: null, step: 'analyze' })
-    try {
-      const form = new FormData()
-      form.append('video', file)
-      const res = await fetch(`${renderUrl}/api/transcode`, { method: 'POST', body: form })
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({ error: 'Transcode failed' }))
-        throw new Error(e.error || 'Transcode failed')
-      }
-      const blob = await res.blob()
-      const mp4 = new File([blob], file.name.replace(/\.mov$/i, '.mp4'), { type: 'video/mp4' })
-      const url = URL.createObjectURL(mp4)
-      patch({ videoFile: mp4, videoUrl: url, isProcessing: false, error: null })
-    } catch (err) {
-      patch({
-        isProcessing: false,
-        error: err instanceof Error ? err.message : 'Transcode failed',
-      })
-    }
+  // Step 01: File selected → advance to analyze
+  // MOV files are kept as-is; Gemini and FFmpeg both handle them fine.
+  // The browser preview may be black for HEVC MOV, but that doesn't affect analyze/export.
+  function handleFileSelect(file: File) {
+    const url = URL.createObjectURL(file)
+    patch({ videoFile: file, videoUrl: url, step: 'analyze', error: null })
   }
 
   // Step 02: Analyze video with Gemini
@@ -307,7 +282,7 @@ export default function Page() {
                 <div className={styles.analyzingState}>
                   <div className={styles.spinner} />
                   <span className={styles.analyzingText}>
-                    {state.videoUrl ? 'Uploading to Gemini & analyzing...' : 'Converting to MP4...'}
+                    Uploading to Gemini &amp; analyzing...
                   </span>
                 </div>
               ) : (
