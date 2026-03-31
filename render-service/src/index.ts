@@ -363,6 +363,62 @@ app.post(
   }
 )
 
+// ── Transcode endpoint — converts any video to H.264 MP4 for browser playback ──
+
+app.post(
+  '/api/transcode',
+  upload.single('video'),
+  async (req: Request, res: Response) => {
+    const videoFile = req.file
+    if (!videoFile) return res.status(400).json({ error: 'No video file provided' })
+
+    const jobId = uuidv4()
+    const tmpDir = path.join(os.tmpdir(), `transcode-${jobId}`)
+    fs.mkdirSync(tmpDir, { recursive: true })
+
+    const inputPath = path.join(tmpDir, `input${path.extname(videoFile.originalname) || '.mov'}`)
+    const outputPath = path.join(tmpDir, 'output.mp4')
+
+    try {
+      fs.writeFileSync(inputPath, videoFile.buffer)
+
+      const ffmpegBin = (ffmpegStatic as unknown as string)
+      if (!ffmpegBin) return res.status(500).json({ error: 'ffmpeg-static binary not found' })
+
+      await execFileAsync(ffmpegBin, [
+        '-i', inputPath,
+        '-c:v', 'libx264',
+        '-preset', 'fast',
+        '-crf', '22',
+        '-c:a', 'aac',
+        '-movflags', '+faststart',
+        '-y',
+        outputPath,
+      ], { maxBuffer: 1024 * 1024 * 10 })
+
+      if (!fs.existsSync(outputPath)) {
+        return res.status(500).json({ error: 'FFmpeg produced no output' })
+      }
+
+      const stat = fs.statSync(outputPath)
+      res.setHeader('Content-Type', 'video/mp4')
+      res.setHeader('Content-Length', stat.size)
+      res.setHeader('Content-Disposition', 'inline; filename="video.mp4"')
+
+      const readStream = fs.createReadStream(outputPath)
+      readStream.pipe(res)
+      readStream.on('end', () => cleanup(tmpDir))
+      readStream.on('error', () => cleanup(tmpDir))
+    } catch (err) {
+      console.error('Transcode error:', err)
+      cleanup(tmpDir)
+      if (!res.headersSent) {
+        return res.status(500).json({ error: 'Transcode failed', details: String(err) })
+      }
+    }
+  }
+)
+
 function cleanup(dir: string) {
   try {
     fs.rmSync(dir, { recursive: true, force: true })
